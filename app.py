@@ -4,93 +4,118 @@ import pandas as pd
 import random
 from datetime import datetime
 
-st.set_page_config(page_title="RTR Results & Parkrun Tool", layout="centered")
-st.title("RunTogether Radcliffe – Race Results & Parkrun Post Generator")
+st.title("RunTogether Radcliffe – Weekly Run Announcement Generator")
 
-tab1, tab2 = st.tabs(["📋 Manual Race Results", "🏃‍♂️ Parkrun Club Results"])
+# Load from pre-included schedule
+df = pd.read_excel("RTR route schedule.xlsx", sheet_name="schedule")
+df = df.drop(columns=["C25K week", "C25K link"], errors="ignore")
+df["2025 Date"] = pd.to_datetime(df["2025 Date"], errors="coerce")
 
+trail_phrases = [
+    "We’re exploring the wonderful trails around Radcliffe this week — a great way to enjoy the local scenery on the move!",
+    "Join us for a scenic route through some of Radcliffe’s finest trails — soft underfoot and full of charm.",
+    "It’s trail time! Get ready for a fun, varied route with great views and good company.",
+    "This week we hit the trails — the perfect way to mix up the pace and enjoy the outdoors.",
+    "Trail lovers, this one’s for you — come enjoy some of our favourite off-road paths!"
+]
 
-# -------------------- TAB 1: Manual Entry --------------------
-with tab1:
-    st.subheader("📋 Enter Race Result Details")
+road_phrases = [
+    "We’re sticking to well-lit roads this week — don’t forget your hi-vis and head torch!",
+    "A night-time road run awaits — be safe, be seen, and join us for a steady evening loop.",
+    "We’ll be keeping it simple on the streets this week — bring your lights and let’s go!",
+    "We’re heading out on a steady road route this week — great for pacing and winter fitness!",
+    "Expect smooth tarmac and streetlights this week — just remember your hi-vis and lights!"
+]
 
-    with st.form("race_form"):
-        race_name = st.text_input("Race Name")
-        race_date = st.date_input("Race Date", value=datetime.today())
-        runner_names = st.text_area("Runner Name(s) (one per line)")
-        distance = st.text_input("Distance (e.g. 10k, Half Marathon)")
-        results = st.text_area("Times or Notes (one per runner)")
-        submit = st.form_submit_button("Generate Post")
-
-    if submit:
-        names = [name.strip() for name in runner_names.strip().split("\n") if name.strip()]
-        notes = [r.strip() for r in results.strip().split("\n")]
-
-        entries = []
-        for i, name in enumerate(names):
-            if i < len(notes):
-                entries.append(f"{name} ({notes[i]})")
-            else:
-                entries.append(name)
-
-        joined_names = ", ".join(entries)
-        date_str = race_date.strftime("%d %B %Y")
-
-        fb_post = f"""🎉 Race Results – {race_name} ({date_str})
-
-Congratulations to {joined_names} for representing RunTogether Radcliffe at the {race_name} on {date_str}!
-
-🏁 Distance: {distance}
-
-Great running everyone! 💪"""
-
-        wa_post = f"""RTR Results – {race_name} 🏃‍♂️
-
-{joined_names}
-📅 {date_str}
-📏 {distance}
-
-Well done team! 🎉"""
-
-        st.markdown("---")
-        st.subheader("📱 Facebook / Instagram Post")
-        st.text_area("Facebook/Instagram", value=fb_post, height=200)
-
-        st.subheader("💬 WhatsApp Message")
-        st.text_area("WhatsApp", value=wa_post, height=150)
+sign_offs = [
+    "See you Thursday!",
+    "Looking forward to running with you Thursday!",
+    "Happy running – see you soon!",
+    "Bring your head torch and a smile!",
+    "Let’s make it a good one!"
+]
 
 
-# -------------------- TAB 2: Parkrun Pull --------------------
-with tab2:
-    st.subheader("🏃‍♂️ Auto-Fetch Parkrun Results")
-    st.info("This tab will eventually auto-pull parkrun results using club ID 49581. Currently a placeholder.")
+today = datetime.today().date()
+future_dates = sorted(df[df["2025 Date"].dt.date >= today]["2025 Date"].dt.date.unique())
+selected_date = st.selectbox("Select the run date:", future_dates, index=0)
 
-    st.write("Click below to simulate fetching parkrun data.")
 
-    if st.button("🔄 Fetch Latest Parkrun Results"):
-        # Placeholder sample
-        fake_parkrun_data = [
-            {"name": "Alice", "time": "25:38", "note": "PB!"},
-            {"name": "Bob", "time": "28:02", "note": ""},
-            {"name": "Charlie", "time": "Volunteer", "note": ""}
-        ]
+row = df[df["2025 Date"].dt.date == selected_date].iloc[0]
+date_str = row["2025 Date"].strftime("%A %d %B %Y")
+meeting_point = row["Meeting point"]
+notes = row["Notes"] or ""
+special_event = str(row["Special events"]).lower() if pd.notna(row["Special events"]) else ""
+route_8k = f"{row['8k Route']} ({row['8k Strava link']})"
+route_5k = f"{row['5k Route']} ({row['5k Strava link']})"
 
-        messages = []
-        for r in fake_parkrun_data:
-            if "Volunteer" in r["time"]:
-                messages.append(f"{r['name']} volunteered 🙌")
-            else:
-                msg = f"{r['name']} ({r['time']})"
-                if r["note"]:
-                    msg += f" – {r['note']}"
-                messages.append(msg)
+if "trail" in notes.lower():
+    note_msg = random.choice(trail_phrases)
+elif "dark" in notes.lower():
+    note_msg = random.choice(road_phrases) + "\n\nIf you’re able to join us, please ensure you have your lights with you and wear hi-vis clothing."
+else:
+    note_msg = notes
 
-        parkrun_post = f"""🎉 Weekend Parkrun Results
+social_msg = ""
+if "social" in special_event:
+    social_msg = "After the run, many of us are going for drinks and food at the market, so it should be a nice social occasion."
 
-This weekend, several RTR members took part in parkrun:
+sign_off = random.choice(sign_offs)
 
-{chr(10).join(messages)}
+email_msg = f"""Subject: This Week’s Run – {date_str}
 
-👏 Great effort everyone – whether you ran or volunteered!"""
+Join us this Thursday for our weekly RunTogether Radcliffe group run!
 
-        st.text_area("Generated Parkrun Post:", value=parkrun_post, height=220)
+📍 Meeting point: {meeting_point}
+🕖 Time: 7:00pm start
+
+You can choose between:
+- 🛣️ 8k route: {route_8k}
+- 🏃 5k route: {route_5k}
+
+{note_msg}
+{social_msg}
+
+📲 Please book on ASAP here:
+https://groups.runtogether.co.uk/RunTogetherRadcliffe/Runs
+
+❌ Can’t make it? Cancel at least 1 hour before:
+https://groups.runtogether.co.uk/My/BookedRuns
+
+{sign_off}"""
+
+fb_msg = f"""📣 RunTogether Radcliffe – Thursday {date_str}
+
+📍 {meeting_point}
+🕖 7pm start
+
+8k: {row['8k Route']}
+https://www.strava.com/routes/{row['8k Strava link'].split('/')[-1]}
+
+5k: {row['5k Route']}
+https://www.strava.com/routes/{row['5k Strava link'].split('/')[-1]}
+
+{note_msg}
+{social_msg}
+
+📲 Book now: https://groups.runtogether.co.uk/RunTogetherRadcliffe/Runs"""
+
+wa_msg = f"""🏃 Thursday {date_str} – RunTogether Radcliffe!
+
+📍 {meeting_point} | 7pm
+
+8k: {row['8k Route']}
+5k: {row['5k Route']}
+
+{note_msg}
+
+📲 Book: https://groups.runtogether.co.uk/RunTogetherRadcliffe/Runs"""
+
+st.subheader("📧 Email Message")
+st.text_area("Email:", value=email_msg, height=300)
+
+st.subheader("📱 Facebook Caption")
+st.text_area("Facebook:", value=fb_msg, height=250)
+
+st.subheader("💬 WhatsApp Message")
+st.text_area("WhatsApp:", value=wa_msg, height=250)
