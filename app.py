@@ -1,8 +1,9 @@
 
 import streamlit as st
 import pandas as pd
+import requests
+from bs4 import BeautifulSoup
 from datetime import datetime
-from parkrun import Club
 
 st.set_page_config(page_title="RTR Results & Parkrun Tool", layout="centered")
 st.title("RunTogether Radcliffe – Race Results & Parkrun Post Generator")
@@ -58,41 +59,42 @@ Well done team! 🎉"""
         st.subheader("💬 WhatsApp Message")
         st.text_area("WhatsApp", value=wa_post, height=150)
 
-# -------------------- TAB 2: Parkrun Club Results --------------------
+
+# -------------------- TAB 2: Parkrun Results via BeautifulSoup --------------------
 with tab2:
-    st.subheader("🏃‍♂️ Fetch Latest Parkrun Results")
+    st.subheader("🏃‍♂️ Fetch Parkrun Club Results from Website")
 
-    try:
-        club = Club(49581)  # RunTogether Radcliffe ID
-        events = club.results()
+    selected_date = st.date_input("Select parkrun week (typically Saturday):", value=datetime.today())
+    fetch = st.button("🔄 Fetch Parkrun Results")
 
-        if not events:
-            st.warning("No Parkrun results found for this club.")
-        else:
-            selected_date = st.date_input("Select a parkrun date", value=datetime.today())
-            selected_str = selected_date.strftime("%Y-%m-%d")
-            filtered = [e for e in events if e['Date'] == selected_str]
+    if fetch:
+        url = "https://www.parkrun.org.uk/groups/49581/"
+        try:
+            response = requests.get(url, headers={"User-Agent": "Mozilla/5.0"})
+            soup = BeautifulSoup(response.content, "html.parser")
 
-            if not filtered:
-                st.info("No Parkrun events found for the selected date.")
+            table = soup.find("table")
+            rows = table.find_all("tr")[1:] if table else []
+
+            results = []
+            for row in rows:
+                cols = row.find_all("td")
+                if len(cols) >= 5:
+                    name = cols[0].get_text(strip=True)
+                    event = cols[1].get_text(strip=True)
+                    time = cols[2].get_text(strip=True)
+                    position = cols[3].get_text(strip=True)
+                    age_grade = cols[4].get_text(strip=True)
+                    results.append(f"{name} – {event} – {time} ({position} place)")
+
+            if results:
+                post = f"🎉 Parkrun Results – {selected_date.strftime('%d %B %Y')}
+
+" + "\n".join(results) + "\n\n👏 Great effort RTR team!"
             else:
-                post_lines = []
-                for r in filtered:
-                    name = r['AthleteName']
-                    time = r['Time']
-                    position = r['Position']
-                    note = "PB!" if r.get("PB", False) else ""
-                    post_lines.append(f"{name} – {time} ({position} place){' – ' + note if note else ''}")
+                post = "No results found on the page."
 
-                parkrun_post = f"""🎉 Parkrun Results – {selected_str}
+            st.text_area("Generated Parkrun Post:", value=post, height=300)
 
-RTR runners took part in Parkrun this weekend:
-
-{chr(10).join(post_lines)}
-
-👏 Great running everyone!"""
-
-                st.text_area("Generated Parkrun Post:", value=parkrun_post, height=300)
-
-    except Exception as e:
-        st.error(f"Error fetching Parkrun data: {e}")
+        except Exception as e:
+            st.error(f"Failed to fetch or parse results: {e}")
