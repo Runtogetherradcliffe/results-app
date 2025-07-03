@@ -96,7 +96,10 @@ with tab2:
                 })
         return data
 
-    if st.button("🔄 Fetch Latest Parkrun Results"):
+    
+selected_date = st.date_input("Select parkrun week (typically the Saturday):", value=datetime.today())
+if st.button("🔄 Fetch Parkrun Results for Selected Week"):
+
         results = fetch_parkrun_results(CLUB_URL)
 
         if results:
