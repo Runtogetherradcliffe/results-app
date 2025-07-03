@@ -1,10 +1,8 @@
 
 import streamlit as st
 import pandas as pd
-import random
 from datetime import datetime
-import requests
-from bs4 import BeautifulSoup
+from parkrun import Club
 
 st.set_page_config(page_title="RTR Results & Parkrun Tool", layout="centered")
 st.title("RunTogether Radcliffe – Race Results & Parkrun Post Generator")
@@ -60,61 +58,41 @@ Well done team! 🎉"""
         st.subheader("💬 WhatsApp Message")
         st.text_area("WhatsApp", value=wa_post, height=150)
 
-
-# -------------------- TAB 2: Parkrun Pull --------------------
+# -------------------- TAB 2: Parkrun Club Results --------------------
 with tab2:
-    st.subheader("🏃‍♂️ Auto-Fetch Parkrun Results")
+    st.subheader("🏃‍♂️ Fetch Latest Parkrun Results")
 
-    CLUB_URL = "https://www.parkrun.org.uk/groups/49581/"
+    try:
+        club = Club(49581)  # RunTogether Radcliffe ID
+        events = club.results()
 
-    def fetch_parkrun_results(club_url):
-        response = requests.get(club_url)
-        if response.status_code != 200:
-            return []
-
-        soup = BeautifulSoup(response.text, "html.parser")
-        table = soup.find("table")
-        if not table:
-            return []
-
-        rows = table.find_all("tr")[1:]  # skip header
-        data = []
-        for row in rows:
-            cols = row.find_all("td")
-            if len(cols) >= 5:
-                name = cols[0].text.strip()
-                event = cols[1].text.strip()
-                time = cols[2].text.strip()
-                position = cols[3].text.strip()
-                age_grade = cols[4].text.strip()
-                data.append({
-                    "name": name,
-                    "event": event,
-                    "time": time,
-                    "position": position,
-                    "age_grade": age_grade
-                })
-        return data
-
-    
-selected_date = st.date_input("Select parkrun week (typically the Saturday):", value=datetime.today())
-if st.button("🔄 Fetch Parkrun Results for Selected Week"):
-
-        results = fetch_parkrun_results(CLUB_URL)
-
-        if results:
-            messages = []
-            for r in results:
-                messages.append(f"{r['name']} – {r['event']} – {r['time']} ({r['position']} place)")
-
-            parkrun_post = f"""🎉 Weekend Parkrun Results
-
-This weekend, RTR runners were out at parkrun:
-
-{chr(10).join(messages)}
-
-👏 Great work everyone!"""
+        if not events:
+            st.warning("No Parkrun results found for this club.")
         else:
-            parkrun_post = "No results could be fetched or no results available."
+            selected_date = st.date_input("Select a parkrun date", value=datetime.today())
+            selected_str = selected_date.strftime("%Y-%m-%d")
+            filtered = [e for e in events if e['Date'] == selected_str]
 
-        st.text_area("Generated Parkrun Post:", value=parkrun_post, height=300)
+            if not filtered:
+                st.info("No Parkrun events found for the selected date.")
+            else:
+                post_lines = []
+                for r in filtered:
+                    name = r['AthleteName']
+                    time = r['Time']
+                    position = r['Position']
+                    note = "PB!" if r.get("PB", False) else ""
+                    post_lines.append(f"{name} – {time} ({position} place){' – ' + note if note else ''}")
+
+                parkrun_post = f"""🎉 Parkrun Results – {selected_str}
+
+RTR runners took part in Parkrun this weekend:
+
+{chr(10).join(post_lines)}
+
+👏 Great running everyone!"""
+
+                st.text_area("Generated Parkrun Post:", value=parkrun_post, height=300)
+
+    except Exception as e:
+        st.error(f"Error fetching Parkrun data: {e}")
